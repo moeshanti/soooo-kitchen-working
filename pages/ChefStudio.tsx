@@ -26,6 +26,7 @@ export const ChefStudio: React.FC<ChefStudioProps> = ({ onSave, onCancel }) => {
   const [instructionsStr, setInstructionsStr] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
+  const [isSimulatedVideo, setIsSimulatedVideo] = useState(false);
 
   // --- Input Data State ---
   const [capturedImageBlob, setCapturedImageBlob] = useState<Blob | null>(null);
@@ -148,7 +149,7 @@ export const ChefStudio: React.FC<ChefStudioProps> = ({ onSave, onCancel }) => {
       if (!capturedImageBlob && !capturedAudioBlob) return;
 
       setStep('processing');
-      setStatus('Consulting the spirits of the kitchen...');
+      setStatus('Consulting Mama SooSoo...');
 
       try {
           const result = await generateRecipeMultimodal(
@@ -209,9 +210,7 @@ export const ChefStudio: React.FC<ChefStudioProps> = ({ onSave, onCancel }) => {
         
         if (result && result.url) {
             setVideoUrl(result.url);
-            if (result.isFallback) {
-                alert("Veo AI video quota reached. Showing a simulated video instead.");
-            }
+            setIsSimulatedVideo(result.isFallback);
         } else {
             alert("Video generation failed or was cancelled.");
         }
@@ -550,7 +549,24 @@ export const ChefStudio: React.FC<ChefStudioProps> = ({ onSave, onCancel }) => {
                     <div className="space-y-4">
                          <div className="aspect-video bg-black/50 border border-white/10 flex items-center justify-center overflow-hidden relative rounded-md">
                             {videoUrl ? (
-                                <video src={videoUrl} controls className="w-full h-full object-cover" />
+                                <>
+                                    <video 
+                                        key={videoUrl}
+                                        src={videoUrl} 
+                                        controls 
+                                        autoPlay 
+                                        muted 
+                                        loop 
+                                        playsInline
+                                        className="w-full h-full object-cover"
+                                        onError={() => console.error("Video error")}
+                                    />
+                                    {isSimulatedVideo && (
+                                        <div className="absolute top-2 right-2 bg-yellow-600/90 text-white text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider backdrop-blur-sm shadow-lg border border-yellow-400/50">
+                                            Simulation Mode
+                                        </div>
+                                    )}
+                                </>
                             ) : (
                                 <div className="text-center px-4">
                                      <p className="text-gray-600 text-xs uppercase tracking-widest">No video yet</p>

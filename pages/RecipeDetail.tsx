@@ -154,6 +154,14 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onBack, onSt
       { label: '🥜 Nut Free', value: 'Nut Free' }
   ];
 
+  const currentVideoUrl = recipe.videoUrl || animatedVideoUrl;
+
+  // Fallback video if API failed or no video generated yet, for display in tutorial section
+  // Using reliable public GCS sample or similar
+  const fallbackVideoUrl = "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"; 
+  const displayVideoUrl = currentVideoUrl || fallbackVideoUrl;
+  const isSimulation = !currentVideoUrl; // If we are showing fallback, it's a simulation
+
   return (
     <div className="min-h-screen bg-soosoo-black animate-fade-in pb-20">
       
@@ -173,22 +181,16 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onBack, onSt
         />
 
         {/* Dynamic Video (Rendered on top when ready) */}
-        {recipe.videoUrl ? (
+        {currentVideoUrl && (
              <video 
-                src={recipe.videoUrl} 
+                src={currentVideoUrl} 
                 className="absolute inset-0 w-full h-full object-cover scale-105 z-1 animate-fade-in" 
                 autoPlay loop muted playsInline
              />
-        ) : (animatedVideoUrl && (
-             <video 
-                src={animatedVideoUrl} 
-                className="absolute inset-0 w-full h-full object-cover scale-105 z-1 animate-fade-in" 
-                autoPlay loop muted playsInline
-             />
-        ))}
+        )}
         
         {/* Bring to Life Trigger - Only show if no video exists yet */}
-        {!recipe.videoUrl && !animatedVideoUrl && (
+        {!currentVideoUrl && (
             <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-30 transition-opacity duration-500">
                 <button 
                     onClick={handleBringToLife}
@@ -218,7 +220,7 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onBack, onSt
           <button onClick={onBack} className="text-white hover:text-soosoo-gold transition flex items-center gap-2 group">
             <span className="border border-white/20 rounded-full p-3 bg-black/20 backdrop-blur group-hover:border-soosoo-gold transition">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 19l-7-7 7-7" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
             </span>
             <span className="text-xs uppercase tracking-widest font-bold opacity-0 group-hover:opacity-100 transition-opacity -ml-2 group-hover:ml-0">Back</span>
@@ -462,11 +464,33 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onBack, onSt
 
             {/* Right Column: Instructions & Media */}
             <div>
-                 {/* AI Video (Veo) */}
-                {/* Note: If video exists, it's shown in the HERO section now, not here. 
-                    Unless we want duplicates, we can keep the static list here clean. 
-                    I removed the duplicate video player here to focus on the instructions. 
-                */}
+                 {/* Video Player Section */}
+                 <div className="mb-12">
+                    <div className="flex items-center gap-3 mb-6">
+                        <h2 className="text-3xl font-serif text-soosoo-gold">Watch Tutorial</h2>
+                        {currentVideoUrl && !currentVideoUrl.includes('storage.googleapis') && (
+                            <span className="bg-red-500/20 text-red-400 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">
+                                AI Generated
+                            </span>
+                        )}
+                        {isSimulation && (
+                             <span className="bg-yellow-600/30 text-yellow-400 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider border border-yellow-600/50">
+                                AI Video Unavailable - Showing Simulation
+                            </span>
+                        )}
+                    </div>
+                    
+                    <div className="relative aspect-video rounded-xl overflow-hidden shadow-2xl border border-white/10 group bg-black">
+                        <video 
+                            src={displayVideoUrl} 
+                            className="w-full h-full object-cover" 
+                            controls 
+                            playsInline
+                        />
+                        {/* Overlay Gradient for Cinema feel */}
+                        <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    </div>
+                </div>
 
                 <h2 className="text-3xl font-serif text-soosoo-gold mb-8 border-b border-white/10 pb-4">The Method</h2>
                 <div className="space-y-12">

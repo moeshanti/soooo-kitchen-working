@@ -279,11 +279,10 @@ export const generateTutorialVideo = async (prompt: string, imageDataUrl?: strin
     } catch (e: any) {
         console.error("Veo error", e);
         
-        // Handle specific Quota Exceeded error or any error to ensure UI doesn't break
-        // Fallback to high-quality stock footage if API limit is reached
-        // This ensures the feature always delivers value during demos/testing
+        // Return a high-quality fallback video (Google Storage Link to avoid Pexels hotlink issues)
+        // Using a reliable public sample video for simulation
         return { 
-            url: "https://cdn.coverr.co/videos/coverr-preparing-food-in-kitchen-2595/1080p.mp4",
+            url: "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", // Replace with a cooking video if available, using BBB for reliability test or a known safe link
             isFallback: true 
         };
     }
