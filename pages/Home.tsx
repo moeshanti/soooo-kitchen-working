@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useRef } from 'react';
 import { Recipe } from '../types';
 import { RecipeCard } from '../components/RecipeCard';
@@ -9,9 +8,10 @@ interface HomeProps {
   recipes: Recipe[];
   onRecipeClick: (id: string) => void;
   onCreateClick: () => void;
+  onShare: (recipe: Recipe) => void;
 }
 
-export const Home: React.FC<HomeProps> = ({ recipes, onRecipeClick, onCreateClick }) => {
+export const Home: React.FC<HomeProps> = ({ recipes, onRecipeClick, onCreateClick, onShare }) => {
   const [activeFilter, setActiveFilter] = useState<string>('ALL');
   const [selectedProfileId, setSelectedProfileId] = useState<string>('p1'); 
   
@@ -52,6 +52,11 @@ export const Home: React.FC<HomeProps> = ({ recipes, onRecipeClick, onCreateClic
               setIsScanningPantry(false);
           }
       }
+  };
+
+  const handleShareClick = (e: React.MouseEvent, recipe: Recipe) => {
+      e.stopPropagation();
+      onShare(recipe);
   };
 
   return (
@@ -196,7 +201,8 @@ export const Home: React.FC<HomeProps> = ({ recipes, onRecipeClick, onCreateClic
                     <RecipeCard 
                         key={recipe.id} 
                         recipe={recipe} 
-                        onClick={() => onRecipeClick(recipe.id)} 
+                        onClick={() => onRecipeClick(recipe.id)}
+                        onShare={handleShareClick}
                     />
                 ))
             ) : (

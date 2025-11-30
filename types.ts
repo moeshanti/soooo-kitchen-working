@@ -66,3 +66,9 @@ export interface DietaryAnalysis {
     }[];
     verdict: string;
 }
+
+export interface ShareModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    recipe: Recipe | null;
+}

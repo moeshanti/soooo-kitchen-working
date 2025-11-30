@@ -9,9 +9,10 @@ interface RecipeDetailProps {
   onStartCooking: () => void;
   onUpdateRecipe: (updatedRecipe: Recipe) => void;
   onAddToCart: (ingredients: Ingredient[], recipeTitle: string) => void;
+  onShare: (recipe: Recipe) => void;
 }
 
-export const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onBack, onStartCooking, onUpdateRecipe, onAddToCart }) => {
+export const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onBack, onStartCooking, onUpdateRecipe, onAddToCart, onShare }) => {
   const [showShoppingList, setShowShoppingList] = useState(false);
   const [newRating, setNewRating] = useState(5);
   const [newComment, setNewComment] = useState('');
@@ -180,13 +181,23 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onBack, onSt
             </div>
         )}
         
-        <div className="absolute top-28 left-6 z-30">
+        <div className="absolute top-28 left-6 z-30 flex items-center gap-4">
           <button onClick={onBack} className="text-white hover:text-soosoo-gold transition flex items-center gap-2 group">
             <span className="border border-white/20 rounded-full p-3 bg-black/20 backdrop-blur group-hover:border-soosoo-gold transition">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 19l-7-7 7-7" /></svg>
             </span>
             <span className="text-xs uppercase tracking-widest font-bold opacity-0 group-hover:opacity-100 transition-opacity -ml-2 group-hover:ml-0">Back</span>
           </button>
+        </div>
+
+        {/* Share Button (Top Right) */}
+        <div className="absolute top-28 right-6 z-30">
+            <button onClick={() => onShare(recipe)} className="text-white hover:text-soosoo-gold transition flex items-center gap-2 group">
+                <span className="text-xs uppercase tracking-widest font-bold opacity-0 group-hover:opacity-100 transition-opacity -mr-2 group-hover:mr-0">Share</span>
+                <span className="border border-white/20 rounded-full p-3 bg-black/20 backdrop-blur group-hover:border-soosoo-gold transition">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
+                </span>
+            </button>
         </div>
 
         <div className="absolute bottom-0 left-0 right-0 p-8 z-20 pb-20">
@@ -262,7 +273,108 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onBack, onSt
                     </ul>
 
                     {/* Dietary Intelligence (Chef Mode UI) */}
-                    {/* ... (Existing Intelligence UI code) ... */}
+                    <div className="mt-12 group relative overflow-hidden rounded-xl bg-[#121212] border border-white/10 transition-all hover:border-soosoo-gold/30">
+                        {isThinking && (
+                            <div className="absolute inset-0 z-20 pointer-events-none overflow-hidden rounded-xl">
+                                <div className="absolute top-0 left-0 right-0 h-1 bg-soosoo-gold shadow-[0_0_20px_#D4AF37] animate-[slideDown_2s_linear_infinite]"></div>
+                                <div className="absolute inset-0 bg-soosoo-gold/5"></div>
+                            </div>
+                        )}
+
+                        <div className="p-6 relative z-10">
+                             <div className="flex justify-between items-center cursor-pointer" onClick={() => setShowDietary(!showDietary)}>
+                                 <h4 className="text-sm font-bold uppercase tracking-widest text-soosoo-gold flex items-center gap-3">
+                                    <div className={`w-8 h-8 rounded-full bg-soosoo-gold/10 flex items-center justify-center transition-all ${isThinking ? 'animate-pulse bg-soosoo-gold text-black' : ''}`}>
+                                        <span className="text-lg">👩‍🍳</span>
+                                    </div>
+                                    Chef's Dietary Intelligence
+                                 </h4>
+                                 <svg className={`w-4 h-4 text-gray-500 transform transition-transform ${showDietary ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                             </div>
+                             
+                             {showDietary && (
+                                 <div className="mt-6 animate-fade-in space-y-4">
+                                     <p className="text-gray-500 text-xs">Uses <span className="text-soosoo-gold">Gemini Thinking</span> to intelligently adapt recipes.</p>
+                                     
+                                     <div className="flex relative">
+                                         <input 
+                                            value={dietaryInput}
+                                            onChange={(e) => setDietaryInput(e.target.value)}
+                                            onKeyDown={(e) => e.key === 'Enter' && handleAnalyzeDiet()}
+                                            placeholder="How should I adapt this?"
+                                            disabled={isThinking}
+                                            className="bg-black/50 border border-white/20 text-white text-sm pl-4 pr-24 py-4 w-full focus:border-soosoo-gold outline-none transition-colors rounded-lg font-mono"
+                                         />
+                                         <button 
+                                            onClick={() => handleAnalyzeDiet()}
+                                            disabled={isThinking}
+                                            className="absolute right-1 top-1 bottom-1 bg-soosoo-gold text-black px-4 rounded-md text-[10px] font-bold uppercase tracking-wider hover:bg-white transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                         >
+                                             {isThinking ? 'Thinking...' : 'Ask Chef'}
+                                         </button>
+                                     </div>
+
+                                     {/* Quick Prompts */}
+                                     {!dietaryResult && !isThinking && (
+                                         <div className="flex flex-wrap gap-2 mt-2">
+                                             {QUICK_PROMPTS.map(p => (
+                                                 <button
+                                                    key={p.value}
+                                                    onClick={() => handleAnalyzeDiet(p.value)}
+                                                    className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-full text-[10px] uppercase font-bold text-gray-400 hover:text-white hover:border-soosoo-gold transition"
+                                                 >
+                                                     {p.label}
+                                                 </button>
+                                             ))}
+                                         </div>
+                                     )}
+
+                                     {thinkingError && (
+                                         <div className="text-red-400 text-xs mt-2 border-l-2 border-red-500 pl-3 py-1">
+                                             {thinkingError}
+                                         </div>
+                                     )}
+
+                                     {dietaryResult && (
+                                         <div className="mt-6 space-y-4 animate-fade-in">
+                                             <div className="flex justify-between items-center border-b border-white/10 pb-2">
+                                                 <span className="text-white font-serif text-lg">{dietaryResult.title}</span>
+                                                 <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-widest ${
+                                                     dietaryResult.feasibility === 'High' ? 'bg-green-500/20 text-green-400' : 
+                                                     dietaryResult.feasibility === 'Medium' ? 'bg-yellow-500/20 text-yellow-400' : 
+                                                     'bg-red-500/20 text-red-400'
+                                                 }`}>
+                                                     Feasibility: {dietaryResult.feasibility}
+                                                 </span>
+                                             </div>
+
+                                             <div className="grid gap-3">
+                                                 {dietaryResult.substitutions.map((sub, idx) => (
+                                                     <div key={idx} className="bg-white/5 border border-white/10 rounded-lg p-4 hover:border-soosoo-gold/30 transition-colors">
+                                                         <div className="flex items-center gap-3 text-sm mb-2">
+                                                             <span className="text-gray-500 line-through decoration-red-500/50">{sub.original}</span>
+                                                             <svg className="w-4 h-4 text-soosoo-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
+                                                             <span className="text-white font-bold">{sub.substitute}</span>
+                                                         </div>
+                                                         <p className="text-xs text-gray-300 mb-2 font-sans bg-black/30 p-2 rounded leading-relaxed">{sub.instruction}</p>
+                                                         <div className="flex gap-2 items-start">
+                                                             <span className="text-[10px] uppercase text-soosoo-gold tracking-wider mt-0.5">Why:</span>
+                                                             <p className="text-[11px] text-gray-500 italic leading-tight">{sub.science}</p>
+                                                         </div>
+                                                     </div>
+                                                 ))}
+                                             </div>
+
+                                             <div className="bg-soosoo-gold/10 p-4 rounded-lg border-l-2 border-soosoo-gold">
+                                                 <h5 className="text-[10px] font-bold text-soosoo-gold uppercase tracking-widest mb-1">Chef's Promise</h5>
+                                                 <p className="text-sm text-gray-300 font-light">{dietaryResult.verdict}</p>
+                                             </div>
+                                         </div>
+                                     )}
+                                 </div>
+                             )}
+                        </div>
+                    </div>
 
                      <div className="mt-8">
                         <button onClick={handleSpeakIngredients} disabled={isSpeaking} className={`text-xs uppercase tracking-widest flex items-center gap-2 transition ${isSpeaking ? 'text-soosoo-gold animate-pulse' : 'text-gray-500 hover:text-soosoo-gold'}`}>
@@ -315,7 +427,44 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onBack, onSt
 
                 <div className="mt-24 pt-12 border-t border-white/5">
                     <h2 className="text-2xl font-serif text-white mb-8">Guest Book</h2>
-                    {/* Reviews (Existing) */}
+                    <form onSubmit={handleSubmitReview} className="bg-soosoo-paper p-8 mb-10 border border-white/5 shadow-xl">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Rating</label>
+                                <div className="flex gap-2">
+                                    {[1, 2, 3, 4, 5].map((star) => (
+                                        <button key={star} type="button" onClick={() => setNewRating(star)} className={`text-2xl transition hover:scale-110 ${newRating >= star ? 'text-soosoo-gold' : 'text-gray-700'}`}>★</button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Name</label>
+                                <input required className="w-full bg-black/30 border border-gray-700 text-white p-3 text-sm focus:border-soosoo-gold outline-none transition-colors" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="Your Name" />
+                            </div>
+                        </div>
+                        <div className="mb-6">
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Thoughts</label>
+                            <textarea required className="w-full bg-black/30 border border-gray-700 text-white p-3 text-sm h-24 focus:border-soosoo-gold outline-none transition-colors" value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder="Share your experience..." />
+                        </div>
+                        <button type="submit" className="bg-white text-black px-8 py-3 text-xs font-bold uppercase tracking-widest hover:bg-soosoo-gold transition duration-300">Sign Guestbook</button>
+                    </form>
+
+                    <div className="space-y-8">
+                        {recipe.reviews && recipe.reviews.length > 0 ? (
+                            recipe.reviews.map(review => (
+                                <div key={review.id} className="border-b border-white/5 pb-8 last:border-0">
+                                    <div className="flex justify-between items-baseline mb-3">
+                                        <h4 className="font-serif text-xl text-white italic">{review.userName}</h4>
+                                        <span className="text-soosoo-gold text-sm tracking-widest">{'★'.repeat(review.rating)}</span>
+                                    </div>
+                                    <p className="text-gray-400 font-light leading-relaxed">{review.comment}</p>
+                                    <div className="mt-2 text-[10px] text-gray-600 uppercase tracking-widest">{new Date(review.createdAt).toLocaleDateString()}</div>
+                                </div>
+                            ))
+                        ) : (
+                            <p className="text-gray-600 italic">The table is quiet. Be the first to speak.</p>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>

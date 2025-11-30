@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { UserMode, Recipe, CartItem, Ingredient } from './types';
 import { INITIAL_RECIPES } from './constants';
@@ -9,6 +8,7 @@ import { RecipeDetail } from './pages/RecipeDetail';
 import { CookingMode } from './pages/CookingMode';
 import { ChefStudio } from './pages/ChefStudio';
 import { CartDrawer } from './components/CartDrawer';
+import { ShareModal } from './components/ShareModal';
 
 const App: React.FC = () => {
   const [userMode, setUserMode] = useState<UserMode>(UserMode.VIEWER);
@@ -17,6 +17,10 @@ const App: React.FC = () => {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [currentRoute, setCurrentRoute] = useState<string>('home');
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
+
+  // Share Modal State
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [recipeToShare, setRecipeToShare] = useState<Recipe | null>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem('soosoo_recipes');
@@ -58,7 +62,6 @@ const App: React.FC = () => {
   const saveRecipe = (newRecipe: Recipe) => {
     const updated = [newRecipe, ...recipes];
     setRecipes(updated);
-    // Robust Save Handler
     try {
         localStorage.setItem('soosoo_recipes', JSON.stringify(updated));
     } catch (e) {
@@ -87,28 +90,32 @@ const App: React.FC = () => {
     if (selectedRecipeId) setCurrentRoute('cooking');
   };
 
+  const handleShare = (recipe: Recipe) => {
+      setRecipeToShare(recipe);
+      setIsShareModalOpen(true);
+  };
+
   const renderContent = () => {
     switch (currentRoute) {
       case 'home':
-        return <Home recipes={recipes} onRecipeClick={handleRecipeClick} onCreateClick={() => navigate('create')} />;
+        return <Home recipes={recipes} onRecipeClick={handleRecipeClick} onCreateClick={() => navigate('create')} onShare={handleShare} />;
       case 'detail':
         const recipe = recipes.find(r => r.id === selectedRecipeId);
-        if (!recipe) return <Home recipes={recipes} onRecipeClick={handleRecipeClick} onCreateClick={() => navigate('create')} />;
-        return <RecipeDetail recipe={recipe} onBack={() => navigate('home')} onStartCooking={handleStartCooking} onUpdateRecipe={updateRecipe} onAddToCart={addToCart} />;
+        if (!recipe) return <Home recipes={recipes} onRecipeClick={handleRecipeClick} onCreateClick={() => navigate('create')} onShare={handleShare} />;
+        return <RecipeDetail recipe={recipe} onBack={() => navigate('home')} onStartCooking={handleStartCooking} onUpdateRecipe={updateRecipe} onAddToCart={addToCart} onShare={handleShare} />;
       case 'cooking':
         const cookingRecipe = recipes.find(r => r.id === selectedRecipeId);
-        if (!cookingRecipe) return <Home recipes={recipes} onRecipeClick={handleRecipeClick} onCreateClick={() => navigate('create')} />;
+        if (!cookingRecipe) return <Home recipes={recipes} onRecipeClick={handleRecipeClick} onCreateClick={() => navigate('create')} onShare={handleShare} />;
         return <CookingMode recipe={cookingRecipe} onExit={() => navigate('detail')} />;
       case 'create':
         return <ChefStudio onSave={saveRecipe} onCancel={() => navigate('home')} />;
       default:
-        return <Home recipes={recipes} onRecipeClick={handleRecipeClick} onCreateClick={() => navigate('create')} />;
+        return <Home recipes={recipes} onRecipeClick={handleRecipeClick} onCreateClick={() => navigate('create')} onShare={handleShare} />;
     }
   };
 
   return (
     <div className="min-h-screen bg-soosoo-cream font-sans">
-      {/* Navbar hidden in cooking mode, handled inside component if needed */}
       {currentRoute !== 'cooking' && (
         <Navbar 
             mode={userMode} 
@@ -121,6 +128,7 @@ const App: React.FC = () => {
       {renderContent()}
       {currentRoute !== 'cooking' && <ChatWidget />}
       <CartDrawer isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} cartItems={cart} onRemove={removeFromCart} onUpdateQuantity={updateCartQuantity} onClear={clearCart} />
+      <ShareModal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} recipe={recipeToShare} />
     </div>
   );
 };
