@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Recipe } from '../types';
 import { speakText, connectLiveSession } from '../services/geminiService';
@@ -10,6 +11,11 @@ interface CookingModeProps {
 export const CookingMode: React.FC<CookingModeProps> = ({ recipe, onExit }) => {
   const [currentStep, setCurrentStep] = useState(0);
   
+  // Smart Timer State
+  const [timerDuration, setTimerDuration] = useState<number | null>(null);
+  const [timerRemaining, setTimerRemaining] = useState<number | null>(null);
+  const [isTimerRunning, setIsTimerRunning] = useState(false);
+
   // --- Live Mode State ---
   const [isLiveMode, setIsLiveMode] = useState(false);
   const [liveStatus, setLiveStatus] = useState<'disconnected' | 'connecting' | 'listening' | 'speaking'>('disconnected');
@@ -18,32 +24,106 @@ export const CookingMode: React.FC<CookingModeProps> = ({ recipe, onExit }) => {
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   
+  // Audio Playback Ref to stop current utterance
+  const stopAudioRef = useRef<(() => void) | null>(null);
+
   // Track playback time to schedule chunks sequentially
   const nextStartTimeRef = useRef<number>(0);
+
+  // Stop audio on unmount or when step changes
+  useEffect(() => {
+      return () => {
+          if (stopAudioRef.current) {
+              stopAudioRef.current();
+          }
+      };
+  }, []);
 
   // Auto-speak new step text (Legacy TTS)
   useEffect(() => {
     if (!isLiveMode) {
-        const timer = setTimeout(() => {
+        // Stop any previous audio before starting new one
+        if (stopAudioRef.current) {
+            stopAudioRef.current();
+            stopAudioRef.current = null;
+        }
+
+        const timer = setTimeout(async () => {
             const text = recipe.instructions[currentStep].text;
-            speakText(text);
+            const { stop } = await speakText(text);
+            stopAudioRef.current = stop;
         }, 500);
-        return () => clearTimeout(timer);
+        
+        return () => {
+            clearTimeout(timer);
+            if (stopAudioRef.current) stopAudioRef.current();
+        };
     }
   }, [currentStep, recipe.instructions, isLiveMode]);
 
-  const handleNext = () => {
+  // Timer Countdown Logic
+  useEffect(() => {
+      let interval: any;
+      if (isTimerRunning && timerRemaining !== null && timerRemaining > 0) {
+          interval = setInterval(() => {
+              setTimerRemaining(prev => (prev !== null ? prev - 1 : 0));
+          }, 1000);
+      } else if (timerRemaining === 0) {
+          setIsTimerRunning(false);
+          (async () => {
+              const { stop } = await speakText("Timer finished! Check your food.");
+              stopAudioRef.current = stop;
+          })();
+      }
+      return () => clearInterval(interval);
+  }, [isTimerRunning, timerRemaining]);
+
+  const handleNext = async () => {
+      // Stop current instruction audio immediately
+      if (stopAudioRef.current) {
+          stopAudioRef.current();
+      }
+
       if (currentStep < recipe.instructions.length - 1) {
           setCurrentStep(c => c + 1);
+          setTimerRemaining(null); 
       } else {
-          speakText("Mabrouk! You have finished cooking.");
+          const { stop } = await speakText("Mabrouk! You have finished cooking.");
+          stopAudioRef.current = stop;
       }
   };
 
   const handlePrev = () => {
+      if (stopAudioRef.current) {
+          stopAudioRef.current();
+      }
       if (currentStep > 0) {
           setCurrentStep(c => c - 1);
+          setTimerRemaining(null);
       }
+  };
+
+  const handleExit = () => {
+      if (stopAudioRef.current) {
+          stopAudioRef.current();
+      }
+      stopLiveSession();
+      onExit();
+  };
+
+  // Helper to extract time from text (e.g. "boil for 10 minutes")
+  const extractTimeFromStep = (text: string): number | null => {
+      const match = text.match(/(\d+)\s*(mins?|minutes?)/i);
+      if (match) return parseInt(match[1]);
+      return null;
+  };
+
+  const detectedTime = extractTimeFromStep(recipe.instructions[currentStep].text);
+
+  const startSmartTimer = (minutes: number) => {
+      setTimerDuration(minutes * 60);
+      setTimerRemaining(minutes * 60);
+      setIsTimerRunning(true);
   };
 
   const progress = ((currentStep + 1) / recipe.instructions.length) * 100;
@@ -51,30 +131,28 @@ export const CookingMode: React.FC<CookingModeProps> = ({ recipe, onExit }) => {
   // --- Live API Handlers ---
   const toggleLiveMode = async () => {
       if (isLiveMode) {
-          // Disconnect
           stopLiveSession();
       } else {
-          // Connect
           startLiveSession();
       }
   };
 
   const startLiveSession = async () => {
       setLiveStatus('connecting');
+      // Stop legacy TTS if switching to live mode
+      if (stopAudioRef.current) stopAudioRef.current();
+
       try {
-          // Audio Output Context
           const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
           const outCtx = new AudioContextClass({ sampleRate: 24000 });
           audioContextRef.current = outCtx;
           nextStartTimeRef.current = 0;
 
-          // Connect to Gemini
           const session = await connectLiveSession(
               async (base64Audio, isTurnComplete) => {
                   if (base64Audio) {
                       setLiveStatus('speaking');
                       
-                      // Convert 24k PCM (from Gemini) to buffer
                       const binaryString = atob(base64Audio);
                       const len = binaryString.length;
                       const int16 = new Int16Array(len / 2);
@@ -94,8 +172,6 @@ export const CookingMode: React.FC<CookingModeProps> = ({ recipe, onExit }) => {
                       source.buffer = buffer;
                       source.connect(outCtx.destination);
                       
-                      // CRITICAL: Schedule sequentially
-                      // Start at the end of previous chunk, or 'now' if we are catching up
                       const now = outCtx.currentTime;
                       const startTime = Math.max(now, nextStartTimeRef.current);
                       
@@ -104,12 +180,10 @@ export const CookingMode: React.FC<CookingModeProps> = ({ recipe, onExit }) => {
                   }
 
                   if (isTurnComplete) {
-                      // Estimate when speaking will finish to switch back status
                       const now = outCtx.currentTime;
                       const timeRemaining = Math.max(0, nextStartTimeRef.current - now);
                       
                       setTimeout(() => {
-                          // Check if still connected to avoid zombie state update
                           if (audioContextRef.current?.state !== 'closed') {
                              setLiveStatus('listening');
                           }
@@ -125,28 +199,24 @@ export const CookingMode: React.FC<CookingModeProps> = ({ recipe, onExit }) => {
           setIsLiveMode(true);
           setLiveStatus('listening');
 
-          // Start Input Stream (Microphone)
           const stream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 16000, channelCount: 1 } });
           const inCtx = new AudioContext({ sampleRate: 16000 });
           const source = inCtx.createMediaStreamSource(stream);
-          // Use ScriptProcessor for raw PCM access (workaround for AudioWorklet complexity in single-file setup)
           const processor = inCtx.createScriptProcessor(4096, 1, 1);
           
           processor.onaudioprocess = (e) => {
               const inputData = e.inputBuffer.getChannelData(0);
-              // Downconvert Float32 to Int16 PCM
               const l = inputData.length;
               const int16 = new Int16Array(l);
               for (let i=0; i<l; i++) {
                   int16[i] = Math.max(-1, Math.min(1, inputData[i])) * 32767;
               }
-              // Send blob (using specific pcm mime for our helper)
               const blob = new Blob([int16.buffer], { type: 'audio/pcm' });
               session.sendAudio(blob);
           };
 
           source.connect(processor);
-          processor.connect(inCtx.destination); // needed for chrome to fire events
+          processor.connect(inCtx.destination); 
           
           sourceRef.current = source;
           processorRef.current = processor;
@@ -172,13 +242,19 @@ export const CookingMode: React.FC<CookingModeProps> = ({ recipe, onExit }) => {
       setLiveStatus('disconnected');
   };
 
+  const formatTime = (seconds: number) => {
+      const m = Math.floor(seconds / 60);
+      const s = seconds % 60;
+      return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-black text-white flex flex-col animate-fade-in">
         
         {/* Header */}
         <div className="flex justify-between items-center p-8 z-10">
             <h2 className="text-2xl font-serif text-soosoo-gold italic">{recipe.title}</h2>
-            <button onClick={() => { stopLiveSession(); onExit(); }} className="group flex items-center gap-2 text-gray-500 hover:text-white transition">
+            <button onClick={handleExit} className="group flex items-center gap-2 text-gray-500 hover:text-white transition">
                 <span className="text-xs font-bold tracking-[0.2em] uppercase">Exit</span>
                 <svg className="w-5 h-5 group-hover:rotate-90 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
@@ -199,10 +275,31 @@ export const CookingMode: React.FC<CookingModeProps> = ({ recipe, onExit }) => {
                 {recipe.instructions[currentStep].text}
             </h1>
 
-            {recipe.instructions[currentStep].durationMinutes && (
-                <div className="inline-flex items-center gap-4 border border-white/20 px-8 py-4 rounded-full text-xl text-soosoo-gold bg-white/5 backdrop-blur-md mb-8">
-                    <svg className="w-6 h-6 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                    <span className="font-mono">{recipe.instructions[currentStep].durationMinutes} mins</span>
+            {/* Smart Timer Chip */}
+            {detectedTime && !timerRemaining && (
+                <button 
+                    onClick={() => startSmartTimer(detectedTime)}
+                    className="inline-flex items-center gap-3 bg-white/10 hover:bg-soosoo-gold hover:text-black border border-white/20 px-6 py-3 rounded-full text-lg font-bold transition-all mb-8 animate-pulse"
+                >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    Start Timer ({detectedTime}m)
+                </button>
+            )}
+
+            {/* Active Timer Display */}
+            {timerRemaining !== null && (
+                <div className="flex flex-col items-center gap-2 mb-8">
+                    <div className="text-6xl font-mono font-bold text-soosoo-gold tabular-nums tracking-widest drop-shadow-[0_0_15px_rgba(212,175,55,0.5)]">
+                        {formatTime(timerRemaining)}
+                    </div>
+                    <div className="flex gap-4">
+                        <button onClick={() => setIsTimerRunning(!isTimerRunning)} className="text-xs uppercase font-bold text-gray-400 hover:text-white">
+                            {isTimerRunning ? 'Pause' : 'Resume'}
+                        </button>
+                        <button onClick={() => setTimerRemaining(null)} className="text-xs uppercase font-bold text-red-400 hover:text-red-300">
+                            Stop
+                        </button>
+                    </div>
                 </div>
             )}
 

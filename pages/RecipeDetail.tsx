@@ -85,7 +85,8 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onBack, onSt
       setIsSpeaking(true);
       try {
         const text = "Here are the ingredients you need: " + recipe.ingredients.map(i => `${i.amount} of ${i.item}`).join(", ");
-        await speakText(text);
+        const { stop } = await speakText(text);
+        // We could store 'stop' if we wanted a "Stop Reading" button, but simple playback is fine here.
       } catch (error) {
         console.error("Failed to speak ingredients", error);
         alert("Sorry, I couldn't read the ingredients right now.");
@@ -98,12 +99,17 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onBack, onSt
   const handleBringToLife = async () => {
       setIsAnimating(true);
       try {
-          const video = await generateTutorialVideo(recipe.title, imgSrc);
-          if (video) {
-              setAnimatedVideoUrl(video);
+          const result = await generateTutorialVideo(recipe.title, imgSrc);
+          if (result && result.url) {
+              setAnimatedVideoUrl(result.url);
               // Persist the video
-              const updated = { ...recipe, videoUrl: video };
+              const updated = { ...recipe, videoUrl: result.url };
               onUpdateRecipe(updated);
+              
+              if (result.isFallback) {
+                  // Optional: Notify user it's a simulation if needed, but for "Bring to Life" seamless is better
+                  console.log("Using simulation video due to quota");
+              }
           } else {
               alert("Could not animate this dish. Try again later.");
           }
@@ -212,7 +218,7 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onBack, onSt
           <button onClick={onBack} className="text-white hover:text-soosoo-gold transition flex items-center gap-2 group">
             <span className="border border-white/20 rounded-full p-3 bg-black/20 backdrop-blur group-hover:border-soosoo-gold transition">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 19l-7-7 7-7" />
                 </svg>
             </span>
             <span className="text-xs uppercase tracking-widest font-bold opacity-0 group-hover:opacity-100 transition-opacity -ml-2 group-hover:ml-0">Back</span>

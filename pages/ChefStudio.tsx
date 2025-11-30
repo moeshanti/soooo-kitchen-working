@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Recipe, Ingredient, InstructionStep } from '../types';
 import { 
@@ -204,15 +205,19 @@ export const ChefStudio: React.FC<ChefStudioProps> = ({ onSave, onCancel }) => {
     setStatus('Directing your tutorial (this may take a minute)...');
     try {
         const imageParam = (imageUrl && imageUrl.startsWith('data:')) ? imageUrl : undefined;
-        const url = await generateTutorialVideo(title, imageParam);
-        if (url) {
-            setVideoUrl(url);
+        const result = await generateTutorialVideo(title, imageParam);
+        
+        if (result && result.url) {
+            setVideoUrl(result.url);
+            if (result.isFallback) {
+                alert("Veo AI video quota reached. Showing a simulated video instead.");
+            }
         } else {
             alert("Video generation failed or was cancelled.");
         }
-    } catch (err) {
-        alert("Failed to generate video");
+    } catch (err: any) {
         console.error(err);
+        alert("Failed to generate video");
     } finally {
         setStep('edit');
     }
