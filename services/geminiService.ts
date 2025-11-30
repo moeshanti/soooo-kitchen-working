@@ -1,5 +1,6 @@
-import { GoogleGenAI, Type, Modality } from "@google/genai";
-import { Recipe } from "../types";
+
+import { GoogleGenAI, Type, Modality, LiveServerMessage } from "@google/genai";
+import { Recipe, DietaryAnalysis } from "../types";
 
 const getAI = () => {
     // Ensure API Key exists
@@ -43,6 +44,57 @@ export const askMama = async (query: string, context?: string): Promise<string> 
   }
 };
 
+// --- Thinking Mode (Dietary Intelligence) ---
+export const generateThinkingSubstitutions = async (recipe: Recipe, diet: string): Promise<DietaryAnalysis | null> => {
+  const ai = getAI();
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-pro-preview',
+      contents: `You are a Master Chef and Expert Nutritionist who specializes in dietary adaptations without sacrificing flavor.
+      
+      The user wants to adapt this dish: "${recipe.title}" (${JSON.stringify(recipe.ingredients)}) to match this diet: "${diet}".
+      
+      Identify ingredients that conflict with "${diet}".
+      Propose practical, store-bought substitutions that maintain the soul and texture of the dish. Focus on culinary techniques (e.g., "whipping aquafaba to mimic egg whites") rather than chemical formulas.
+      
+      Return the result as structured JSON.`,
+      config: {
+        thinkingConfig: { thinkingBudget: 2048 }, 
+        maxOutputTokens: 8192, // Increased to prevent JSON truncation
+        responseMimeType: "application/json",
+        responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+                title: { type: Type.STRING, description: "A catchy title for the new version (e.g. 'Vegan Maqluba')" },
+                feasibility: { type: Type.STRING, enum: ["High", "Medium", "Low"] },
+                substitutions: {
+                    type: Type.ARRAY,
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            original: { type: Type.STRING },
+                            substitute: { type: Type.STRING },
+                            instruction: { type: Type.STRING, description: "Practical cooking prep instruction" },
+                            science: { type: Type.STRING, description: "Why this works (Flavor/Texture focus)" }
+                        }
+                    }
+                },
+                verdict: { type: Type.STRING, description: "A warm, encouraging summary of how the new dish will taste." }
+            }
+        }
+      }
+    });
+
+    if (response.text) {
+        return JSON.parse(response.text) as DietaryAnalysis;
+    }
+    return null;
+  } catch (e) {
+    console.error("Thinking error", e);
+    return null;
+  }
+};
+
 // --- Multimodal Recipe Generation (Image + Audio) ---
 export const generateRecipeMultimodal = async (imageBlob?: Blob, audioBlob?: Blob): Promise<Partial<Recipe>> => {
   const ai = getAI();
@@ -57,7 +109,6 @@ export const generateRecipeMultimodal = async (imageBlob?: Blob, audioBlob?: Blo
   // Add Audio if present
   if (audioBlob) {
     const base64Audio = await blobToBase64(audioBlob);
-    // Assuming mp3/webm depending on browser, but sending as generic audio/mp3 usually works for Gemini if header is stripped
     parts.push({ inlineData: { mimeType: 'audio/mp3', data: base64Audio } }); 
   }
 
@@ -123,7 +174,6 @@ export const generateRecipeMultimodal = async (imageBlob?: Blob, audioBlob?: Blo
   }
 };
 
-// --- Legacy Single Mode Functions (kept for compatibility if needed internally) ---
 export const analyzeIngredientsAndSuggestRecipe = async (imageBlob: Blob): Promise<Partial<Recipe>> => {
     return generateRecipeMultimodal(imageBlob, undefined);
 };
@@ -149,7 +199,6 @@ export const generateDishImage = async (prompt: string): Promise<string> => {
             }
         });
         
-        // Find image part
         const parts = response.candidates?.[0]?.content?.parts;
         if (parts) {
             for (const part of parts) {
@@ -161,32 +210,29 @@ export const generateDishImage = async (prompt: string): Promise<string> => {
         throw new Error("No image generated");
     } catch (e) {
         console.error("Image gen error", e);
-        // Fallback placeholder
         return "https://images.unsplash.com/photo-1556910103-1c02745a30bf?q=80&w=1000";
     }
 };
 
 // --- Video Generation (Veo) ---
 export const generateTutorialVideo = async (prompt: string, imageDataUrl?: string): Promise<string | null> => {
-    // Check for API Key first for Veo
-    // Cast window to any to access aistudio which might be defined globally
     const aistudio = (window as any).aistudio;
     if (aistudio && !(await aistudio.hasSelectedApiKey())) {
         try {
             await aistudio.openSelectKey();
         } catch (e) {
             console.error("Key selection failed or cancelled", e);
-            // Don't crash, just return null or let it fail gracefully later
         }
     }
 
-    // Re-init AI to ensure key is picked up if it was just selected
     const ai = getAI(); 
 
     try {
         const request: any = {
             model: 'veo-3.1-fast-generate-preview',
-            prompt: `Cinematic cooking shot: ${prompt}. High quality, slow motion, professional lighting.`,
+            prompt: imageDataUrl 
+                ? "Bring this food image to life. Cinematic slow motion, steam rising, delicious atmosphere." // Img-to-Video prompt
+                : `Cinematic cooking shot: ${prompt}. High quality, slow motion, professional lighting.`, // Text-to-Video prompt
             config: {
                 numberOfVideos: 1,
                 resolution: '720p',
@@ -194,7 +240,7 @@ export const generateTutorialVideo = async (prompt: string, imageDataUrl?: strin
             }
         };
 
-        // If we have an image, use it for Image-to-Video
+        // Image-to-Video
         if (imageDataUrl && imageDataUrl.startsWith('data:')) {
              const base64Data = imageDataUrl.split(',')[1];
              const mimeType = imageDataUrl.split(';')[0].split(':')[1] || 'image/png';
@@ -214,7 +260,6 @@ export const generateTutorialVideo = async (prompt: string, imageDataUrl?: strin
 
         const videoUri = operation.response?.generatedVideos?.[0]?.video?.uri;
         if (videoUri) {
-            // Fetch the actual bytes with the key
              const fetchRes = await fetch(`${videoUri}&key=${process.env.API_KEY}`);
              const blob = await fetchRes.blob();
              return URL.createObjectURL(blob);
@@ -228,19 +273,16 @@ export const generateTutorialVideo = async (prompt: string, imageDataUrl?: strin
 };
 
 // --- TTS ---
-// Global shared AudioContext to prevent hitting browser limit of 6 contexts
 let sharedAudioContext: AudioContext | null = null;
 
 export const speakText = async (text: string): Promise<void> => {
   if (!text.trim()) return;
 
-  // Initialize singleton context
   if (!sharedAudioContext) {
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       sharedAudioContext = new AudioContextClass();
   }
 
-  // Always resume context on user interaction to comply with autoplay policies
   if (sharedAudioContext.state === 'suspended') {
       try {
         await sharedAudioContext.resume();
@@ -266,53 +308,83 @@ export const speakText = async (text: string): Promise<void> => {
 
     const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
     if (base64Audio) {
-      // Gemini returns raw PCM data (Int16), NOT a wav/mp3 file.
-      // We must manually convert this to an AudioBuffer.
-      // Sample rate for Gemini Flash 2.5 TTS is 24000Hz.
       const audioBuffer = pcmToAudioBuffer(base64Audio, sharedAudioContext, 24000);
-      
       const source = sharedAudioContext.createBufferSource();
       source.buffer = audioBuffer;
       source.connect(sharedAudioContext.destination);
       source.start();
-    } else {
-        console.warn("No audio data returned from Gemini TTS");
     }
   } catch (e) {
     console.error("TTS error", e);
-    throw e; // Re-throw to allow caller to handle state
+    throw e;
   }
 };
 
-/**
- * Converts Raw PCM (Int16) base64 string to an AudioBuffer.
- * This is required because Gemini TTS returns raw bytes, not a file with headers.
- */
 function pcmToAudioBuffer(base64: string, ctx: AudioContext, sampleRate: number): AudioBuffer {
     const binaryString = atob(base64);
     const len = binaryString.length;
-    
-    // Create Int16Array from binary string
-    // Each sample is 2 bytes (16 bits)
     const int16Buffer = new Int16Array(len / 2);
     for (let i = 0; i < len; i += 2) {
-        // Little endian
         const byte1 = binaryString.charCodeAt(i);
         const byte2 = binaryString.charCodeAt(i + 1);
-        // Combine two bytes into one 16-bit integer
         const sample = (byte2 << 8) | byte1;
-        // Handle signed integer
         int16Buffer[i / 2] = sample >= 32768 ? sample - 65536 : sample;
     }
-
-    // Create AudioBuffer
     const audioBuffer = ctx.createBuffer(1, int16Buffer.length, sampleRate);
     const channelData = audioBuffer.getChannelData(0);
-
-    // Convert Int16 to Float32 [-1.0, 1.0]
     for (let i = 0; i < int16Buffer.length; i++) {
         channelData[i] = int16Buffer[i] / 32768.0;
     }
-
     return audioBuffer;
 }
+
+
+// --- LIVE API (Bidirectional Voice) ---
+export const connectLiveSession = async (
+    onMessage: (base64: string | null, isTurnComplete: boolean) => void,
+    onClose: () => void
+): Promise<{ sendAudio: (blob: Blob) => void; close: () => void }> => {
+    const ai = getAI();
+    
+    try {
+        const session = await ai.live.connect({
+            model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+            callbacks: {
+                onopen: () => console.log("Live session opened"),
+                onmessage: (msg: LiveServerMessage) => {
+                    const audioData = msg.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data || null;
+                    const isTurnComplete = !!msg.serverContent?.turnComplete;
+                    
+                    if (audioData || isTurnComplete) {
+                        onMessage(audioData, isTurnComplete);
+                    }
+                },
+                onclose: () => {
+                    console.log("Live session closed");
+                    onClose();
+                },
+                onerror: (e) => console.error("Live session error", e)
+            },
+            config: {
+                responseModalities: [Modality.AUDIO],
+                speechConfig: {
+                    voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } }
+                },
+                systemInstruction: "You are SooSoo, a helpful cooking assistant. You are brief, encouraging, and clear. Help the user through the cooking process.",
+            }
+        });
+
+        return {
+            sendAudio: async (pcmBlob: Blob) => {
+                const base64 = await blobToBase64(pcmBlob);
+                session.sendRealtimeInput({
+                     media: { mimeType: "audio/pcm;rate=16000", data: base64 }
+                });
+            },
+            close: () => session.close()
+        };
+    } catch (e) {
+        console.error("Failed to connect live", e);
+        throw e;
+    }
+};

@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { Recipe, Ingredient, Review } from '../types';
-import { speakText } from '../services/geminiService';
+import { Recipe, Ingredient, Review, DietaryAnalysis } from '../types';
+import { speakText, generateTutorialVideo, generateThinkingSubstitutions } from '../services/geminiService';
 
 interface RecipeDetailProps {
   recipe: Recipe;
@@ -18,6 +18,15 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onBack, onSt
   const [userName, setUserName] = useState('');
   const [imgSrc, setImgSrc] = useState(recipe.imageUrl);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [animatedVideoUrl, setAnimatedVideoUrl] = useState<string | null>(null);
+  
+  // Thinking Mode State
+  const [showDietary, setShowDietary] = useState(false);
+  const [dietaryInput, setDietaryInput] = useState('');
+  const [dietaryResult, setDietaryResult] = useState<DietaryAnalysis | null>(null);
+  const [isThinking, setIsThinking] = useState(false);
+  const [thinkingError, setThinkingError] = useState('');
   
   // Shopping List Selection
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set(recipe.ingredients.map((_, i) => i)));
@@ -85,22 +94,118 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onBack, onSt
       }
   };
 
+  // Veo: Image-to-Video
+  const handleBringToLife = async () => {
+      setIsAnimating(true);
+      try {
+          const video = await generateTutorialVideo(recipe.title, imgSrc);
+          if (video) {
+              setAnimatedVideoUrl(video);
+              // Persist the video
+              const updated = { ...recipe, videoUrl: video };
+              onUpdateRecipe(updated);
+          } else {
+              alert("Could not animate this dish. Try again later.");
+          }
+      } catch (e) {
+          console.error(e);
+      } finally {
+          setIsAnimating(false);
+      }
+  };
+
+  // Thinking: Dietary Analysis
+  const handleAnalyzeDiet = async (inputOverride?: string) => {
+      const query = inputOverride || dietaryInput;
+      if (!query.trim()) return;
+      
+      if (inputOverride) setDietaryInput(inputOverride);
+
+      setIsThinking(true);
+      setDietaryResult(null);
+      setThinkingError('');
+      
+      try {
+          const result = await generateThinkingSubstitutions(recipe, query);
+          if (result) {
+            setDietaryResult(result);
+          } else {
+            setThinkingError("The chef needs a bit more information. Try a different request.");
+          }
+      } catch (e) {
+          setThinkingError("My apologies, the kitchen is very busy. Please try again.");
+      } finally {
+          setIsThinking(false);
+      }
+  };
+
   const avgRating = getAverageRating();
+
+  const QUICK_PROMPTS = [
+      { label: '🌿 Vegan', value: 'Vegan' },
+      { label: '🍞 Gluten Free', value: 'Gluten Free' },
+      { label: '🥑 Keto', value: 'Keto' },
+      { label: '🥜 Nut Free', value: 'Nut Free' }
+  ];
 
   return (
     <div className="min-h-screen bg-soosoo-black animate-fade-in pb-20">
       
       {/* Cinematic Header */}
-      <div className="relative h-[85vh] w-full overflow-hidden">
+      <div className="relative h-[85vh] w-full overflow-hidden group/hero">
         <div className="absolute inset-0 bg-black/50 z-10"></div>
         <div className="absolute inset-0 bg-gradient-to-t from-soosoo-black via-transparent to-transparent z-10"></div>
         
+        {/* Layer Logic: Video stays ON TOP if available. Image stays BEHIND. */}
+        
+        {/* Static Image (Always rendered for background) */}
         <img 
             src={imgSrc} 
-            className="w-full h-full object-cover animate-[float_30s_ease-in-out_infinite] scale-110" 
+            className="absolute inset-0 w-full h-full object-cover animate-[float_30s_ease-in-out_infinite] scale-110 z-0" 
             alt={recipe.title} 
             onError={() => setImgSrc('https://images.unsplash.com/photo-1504674900247-0877df9cc836?q=80&w=1200')}
         />
+
+        {/* Dynamic Video (Rendered on top when ready) */}
+        {recipe.videoUrl ? (
+             <video 
+                src={recipe.videoUrl} 
+                className="absolute inset-0 w-full h-full object-cover scale-105 z-1 animate-fade-in" 
+                autoPlay loop muted playsInline
+             />
+        ) : (animatedVideoUrl && (
+             <video 
+                src={animatedVideoUrl} 
+                className="absolute inset-0 w-full h-full object-cover scale-105 z-1 animate-fade-in" 
+                autoPlay loop muted playsInline
+             />
+        ))}
+        
+        {/* Bring to Life Trigger - Only show if no video exists yet */}
+        {!recipe.videoUrl && !animatedVideoUrl && (
+            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-30 transition-opacity duration-500">
+                <button 
+                    onClick={handleBringToLife}
+                    disabled={isAnimating}
+                    className="bg-black/40 backdrop-blur-xl border border-white/30 text-white px-8 py-4 rounded-full flex items-center gap-4 hover:bg-soosoo-gold hover:text-black transition-all shadow-[0_0_30px_rgba(0,0,0,0.5)] group/btn hover:scale-105"
+                >
+                    {isAnimating ? (
+                        <>
+                            <span className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
+                            <span className="uppercase tracking-widest text-xs font-bold">Summoning Magic...</span>
+                        </>
+                    ) : (
+                        <>
+                            <div className="relative">
+                                <span className="absolute -inset-1 bg-white/20 rounded-full animate-ping"></span>
+                                <svg className="w-6 h-6 relative z-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            </div>
+                            <span className="uppercase tracking-widest text-xs font-bold">Bring Dish to Life</span>
+                        </>
+                    )}
+                </button>
+            </div>
+        )}
         
         {/* Back Button */}
         <div className="absolute top-28 left-6 z-30">
@@ -179,14 +284,9 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onBack, onSt
 
                     {showShoppingList && (
                         <div className="bg-soosoo-paper p-6 mb-8 border border-soosoo-gold/20 shadow-lg animate-fade-in relative overflow-hidden">
-                            <div className="absolute top-0 right-0 p-2 opacity-10">
-                                <svg className="w-20 h-20 text-soosoo-gold" fill="currentColor" viewBox="0 0 24 24"><path d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.48 0-.55-.45-1-1-1H5.21l-.94-2H1zm16 16c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z"/></svg>
-                            </div>
-                            
                             <h3 className="font-bold text-white mb-4 uppercase text-xs tracking-widest flex items-center gap-2">
                                 Select items to buy
                             </h3>
-                            
                             <ul className="space-y-3 mb-6 relative z-10">
                                 {recipe.ingredients.map((ing, i) => (
                                     <li 
@@ -198,20 +298,14 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onBack, onSt
                                             {selectedIndices.has(i) && <svg className="w-3 h-3 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
                                         </div>
                                         <span className={selectedIndices.has(i) ? '' : 'line-through decoration-gray-600'}>{ing.amount} {ing.item}</span>
-                                        {selectedIndices.has(i) && (
-                                            <span className="ml-auto text-soosoo-gold text-xs font-mono">${ing.priceEstimate?.toFixed(2)}</span>
-                                        )}
                                     </li>
                                 ))}
                             </ul>
-
-                            {/* Add to Global Cart Action */}
                             <div className="border-t border-white/10 pt-4 mt-4">
                                 <button 
                                     onClick={handleAddSelectionToCart}
                                     className="w-full bg-soosoo-gold text-black font-bold uppercase tracking-widest text-xs py-3 hover:bg-white transition flex items-center justify-center gap-2"
                                 >
-                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
                                     Add Selection to Cart
                                 </button>
                             </div>
@@ -228,8 +322,117 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onBack, onSt
                         ))}
                     </ul>
 
+                    {/* THINKING MODE: Dietary Intelligence Card (CHEF MODE UI) */}
+                    <div className="mt-12 group relative overflow-hidden rounded-xl bg-[#121212] border border-white/10 transition-all hover:border-soosoo-gold/30">
+                        
+                        {/* Thinking Overlay (Scanning Effect) */}
+                        {isThinking && (
+                            <div className="absolute inset-0 z-20 pointer-events-none overflow-hidden rounded-xl">
+                                <div className="absolute top-0 left-0 right-0 h-1 bg-soosoo-gold shadow-[0_0_20px_#D4AF37] animate-[slideDown_2s_linear_infinite]"></div>
+                                <div className="absolute inset-0 bg-soosoo-gold/5"></div>
+                            </div>
+                        )}
+
+                        <div className="p-6 relative z-10">
+                             <div className="flex justify-between items-center cursor-pointer" onClick={() => setShowDietary(!showDietary)}>
+                                 <h4 className="text-sm font-bold uppercase tracking-widest text-soosoo-gold flex items-center gap-3">
+                                    <div className={`w-8 h-8 rounded-full bg-soosoo-gold/10 flex items-center justify-center transition-all ${isThinking ? 'animate-pulse bg-soosoo-gold text-black' : ''}`}>
+                                        <span className="text-lg">👩‍🍳</span>
+                                    </div>
+                                    Chef's Dietary Intelligence
+                                 </h4>
+                                 <svg className={`w-4 h-4 text-gray-500 transform transition-transform ${showDietary ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                             </div>
+                             
+                             {showDietary && (
+                                 <div className="mt-6 animate-fade-in space-y-4">
+                                     <p className="text-gray-500 text-xs">Uses <span className="text-soosoo-gold">Gemini Thinking</span> to intelligently adapt recipes.</p>
+                                     
+                                     <div className="flex relative">
+                                         <input 
+                                            value={dietaryInput}
+                                            onChange={(e) => setDietaryInput(e.target.value)}
+                                            onKeyDown={(e) => e.key === 'Enter' && handleAnalyzeDiet()}
+                                            placeholder="How should I adapt this?"
+                                            disabled={isThinking}
+                                            className="bg-black/50 border border-white/20 text-white text-sm pl-4 pr-24 py-4 w-full focus:border-soosoo-gold outline-none transition-colors rounded-lg font-mono"
+                                         />
+                                         <button 
+                                            onClick={() => handleAnalyzeDiet()}
+                                            disabled={isThinking}
+                                            className="absolute right-1 top-1 bottom-1 bg-soosoo-gold text-black px-4 rounded-md text-[10px] font-bold uppercase tracking-wider hover:bg-white transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                         >
+                                             {isThinking ? 'Thinking...' : 'Ask Chef'}
+                                         </button>
+                                     </div>
+
+                                     {/* Quick Prompts */}
+                                     {!dietaryResult && !isThinking && (
+                                         <div className="flex flex-wrap gap-2 mt-2">
+                                             {QUICK_PROMPTS.map(p => (
+                                                 <button
+                                                    key={p.value}
+                                                    onClick={() => handleAnalyzeDiet(p.value)}
+                                                    className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-full text-[10px] uppercase font-bold text-gray-400 hover:text-white hover:border-soosoo-gold transition"
+                                                 >
+                                                     {p.label}
+                                                 </button>
+                                             ))}
+                                         </div>
+                                     )}
+
+                                     {thinkingError && (
+                                         <div className="text-red-400 text-xs mt-2 border-l-2 border-red-500 pl-3 py-1">
+                                             {thinkingError}
+                                         </div>
+                                     )}
+
+                                     {dietaryResult && (
+                                         <div className="mt-6 space-y-4 animate-fade-in">
+                                             {/* Header Badge */}
+                                             <div className="flex justify-between items-center border-b border-white/10 pb-2">
+                                                 <span className="text-white font-serif text-lg">{dietaryResult.title}</span>
+                                                 <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-widest ${
+                                                     dietaryResult.feasibility === 'High' ? 'bg-green-500/20 text-green-400' : 
+                                                     dietaryResult.feasibility === 'Medium' ? 'bg-yellow-500/20 text-yellow-400' : 
+                                                     'bg-red-500/20 text-red-400'
+                                                 }`}>
+                                                     Feasibility: {dietaryResult.feasibility}
+                                                 </span>
+                                             </div>
+
+                                             {/* Cards Grid */}
+                                             <div className="grid gap-3">
+                                                 {dietaryResult.substitutions.map((sub, idx) => (
+                                                     <div key={idx} className="bg-white/5 border border-white/10 rounded-lg p-4 hover:border-soosoo-gold/30 transition-colors">
+                                                         <div className="flex items-center gap-3 text-sm mb-2">
+                                                             <span className="text-gray-500 line-through decoration-red-500/50">{sub.original}</span>
+                                                             <svg className="w-4 h-4 text-soosoo-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
+                                                             <span className="text-white font-bold">{sub.substitute}</span>
+                                                         </div>
+                                                         <p className="text-xs text-gray-300 mb-2 font-sans bg-black/30 p-2 rounded leading-relaxed">{sub.instruction}</p>
+                                                         <div className="flex gap-2 items-start">
+                                                             <span className="text-[10px] uppercase text-soosoo-gold tracking-wider mt-0.5">Why:</span>
+                                                             <p className="text-[11px] text-gray-500 italic leading-tight">{sub.science}</p>
+                                                         </div>
+                                                     </div>
+                                                 ))}
+                                             </div>
+
+                                             {/* Verdict */}
+                                             <div className="bg-soosoo-gold/10 p-4 rounded-lg border-l-2 border-soosoo-gold">
+                                                 <h5 className="text-[10px] font-bold text-soosoo-gold uppercase tracking-widest mb-1">Chef's Promise</h5>
+                                                 <p className="text-sm text-gray-300 font-light">{dietaryResult.verdict}</p>
+                                             </div>
+                                         </div>
+                                     )}
+                                 </div>
+                             )}
+                        </div>
+                    </div>
+
                      {/* Read Ingredients Voice Helper */}
-                    <div className="mt-12">
+                    <div className="mt-8">
                         <button 
                         onClick={handleSpeakIngredients}
                         disabled={isSpeaking}
@@ -254,15 +457,10 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onBack, onSt
             {/* Right Column: Instructions & Media */}
             <div>
                  {/* AI Video (Veo) */}
-                {recipe.videoUrl && (
-                    <div className="mb-16">
-                        <h2 className="text-3xl font-serif text-soosoo-gold mb-6">Visual Guide</h2>
-                        <div className="relative rounded-sm overflow-hidden border border-white/10 shadow-2xl group cursor-pointer">
-                             <div className="absolute inset-0 bg-soosoo-gold/10 pointer-events-none mix-blend-overlay group-hover:opacity-0 transition"></div>
-                             <video src={recipe.videoUrl} controls className="w-full aspect-video" />
-                        </div>
-                    </div>
-                )}
+                {/* Note: If video exists, it's shown in the HERO section now, not here. 
+                    Unless we want duplicates, we can keep the static list here clean. 
+                    I removed the duplicate video player here to focus on the instructions. 
+                */}
 
                 <h2 className="text-3xl font-serif text-soosoo-gold mb-8 border-b border-white/10 pb-4">The Method</h2>
                 <div className="space-y-12">

@@ -53,3 +53,16 @@ export interface ChatMessage {
   role: 'user' | 'model';
   text: string;
 }
+
+// Structured output for the Dietary Intelligence feature
+export interface DietaryAnalysis {
+    title: string;
+    feasibility: 'High' | 'Medium' | 'Low';
+    substitutions: {
+        original: string;
+        substitute: string;
+        instruction: string;
+        science: string;
+    }[];
+    verdict: string;
+}
