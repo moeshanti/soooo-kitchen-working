@@ -58,6 +58,7 @@ const App: React.FC = () => {
   const saveRecipe = (newRecipe: Recipe) => {
     const updated = [newRecipe, ...recipes];
     setRecipes(updated);
+    // Robust Save Handler
     try {
         localStorage.setItem('soosoo_recipes', JSON.stringify(updated));
     } catch (e) {
@@ -107,8 +108,15 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-soosoo-cream font-sans">
+      {/* Navbar hidden in cooking mode, handled inside component if needed */}
       {currentRoute !== 'cooking' && (
-        <Navbar mode={userMode} setMode={setUserMode} cartCount={cart.length} onOpenCart={() => setIsCartOpen(true)} navigate={(path) => { if (path === '/') { setCurrentRoute('home'); setSelectedRecipeId(null); } else if (path === '/create') { setCurrentRoute('create'); } }} />
+        <Navbar 
+            mode={userMode} 
+            setMode={setUserMode} 
+            cartCount={cart.length} 
+            onOpenCart={() => setIsCartOpen(true)} 
+            navigate={(path) => { if (path === '/') { setCurrentRoute('home'); setSelectedRecipeId(null); } else if (path === '/create') { setCurrentRoute('create'); } }} 
+        />
       )}
       {renderContent()}
       {currentRoute !== 'cooking' && <ChatWidget />}

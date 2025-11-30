@@ -48,14 +48,14 @@ export const CookingMode: React.FC<CookingModeProps> = ({ recipe, onExit }) => {
             stopAudioRef.current = null;
         }
 
-        const timer = setTimeout(async () => {
+        // IMMEDIATE PLAYBACK: No timeout delay
+        (async () => {
             const text = recipe.instructions[currentStep].text;
             const { stop } = await speakText(text);
             stopAudioRef.current = stop;
-        }, 500);
+        })();
         
         return () => {
-            clearTimeout(timer);
             if (stopAudioRef.current) stopAudioRef.current();
         };
     }

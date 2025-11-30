@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { UserMode } from '../types';
 
 interface NavbarProps {
@@ -11,60 +11,83 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ mode, setMode, navigate, cartCount, onOpenCart }) => {
-  return (
-    <nav className="fixed top-6 left-0 right-0 z-50 flex justify-center pointer-events-none">
-      <div className="pointer-events-auto bg-black/60 backdrop-blur-xl border border-white/10 rounded-full px-8 py-3 shadow-2xl flex items-center justify-between gap-12 max-w-5xl w-[90%] md:w-auto transition-all duration-300 hover:bg-black/80 hover:border-soosoo-gold/30">
-        
-        {/* Logo Section */}
-        <div className="flex items-center gap-4 cursor-pointer group" onClick={() => navigate('/')}>
-          {/* Icon/Logo Graphic */}
-          <div className="relative w-12 h-12 flex items-center justify-center bg-gradient-to-br from-soosoo-gold to-yellow-600 rounded-full shadow-lg group-hover:rotate-12 transition-transform duration-500">
-             <span className="text-3xl filter drop-shadow-md">🍳</span>
-          </div>
-          
-          <div className="flex flex-col">
-            <h1 className="text-3xl font-serif font-bold text-white leading-none tracking-wide drop-shadow-md group-hover:text-soosoo-gold transition-colors">
-              Susu's <span className="font-light text-gray-300 group-hover:text-white">Kitchen</span>
-            </h1>
-            <span className="text-[10px] font-bold text-soosoo-gold uppercase tracking-[0.3em] leading-none mt-1.5 ml-0.5 opacity-80 group-hover:opacity-100 transition-opacity">
-              Made with love
-            </span>
-          </div>
-        </div>
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
 
-        {/* Right Actions */}
-        <div className="flex items-center gap-4 md:gap-6">
-          <button 
+  // Auto-collapse on scroll
+  useEffect(() => {
+    const handleScroll = () => {
+        setScrolled(window.scrollY > 50);
+        if (window.scrollY > 50) setIsExpanded(false);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  return (
+    <div className="fixed bottom-8 left-0 right-0 z-50 flex justify-center pointer-events-none">
+      <div 
+        onMouseEnter={() => setIsExpanded(true)}
+        onMouseLeave={() => setIsExpanded(false)}
+        className={`
+            pointer-events-auto bg-black/60 backdrop-blur-xl border border-white/10 shadow-2xl 
+            flex items-center justify-between transition-all duration-500 ease-out
+            ${isExpanded ? 'px-8 py-4 rounded-2xl gap-8 w-auto' : 'px-6 py-3 rounded-full gap-4 w-auto'}
+        `}
+      >
+        
+        {/* Home / Logo */}
+        <button 
+            onClick={() => navigate('/')}
+            className="group flex items-center gap-3"
+        >
+            <div className="w-10 h-10 flex items-center justify-center bg-gradient-to-br from-soosoo-gold to-yellow-600 rounded-full shadow-lg group-hover:scale-110 transition-transform">
+                <span className="text-xl filter drop-shadow-sm">🍳</span>
+            </div>
+            {isExpanded && (
+                <div className="flex flex-col animate-fade-in">
+                    <span className="text-lg font-serif font-bold text-white leading-none">Susu's</span>
+                    <span className="text-[9px] text-soosoo-gold uppercase tracking-[0.2em] leading-none">Kitchen</span>
+                </div>
+            )}
+        </button>
+
+        {/* Divider */}
+        {isExpanded && <div className="h-8 w-px bg-white/10 animate-fade-in"></div>}
+
+        {/* Cart */}
+        <button 
             onClick={onOpenCart}
-            className="text-gray-400 hover:text-soosoo-gold transition transform hover:scale-110 relative"
-          >
+            className="relative p-2 text-gray-400 hover:text-soosoo-gold transition-colors hover:scale-110 transform"
+        >
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
             </svg>
             {cartCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-soosoo-gold text-black text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full shadow-lg">
+                <span className="absolute -top-1 -right-1 bg-soosoo-gold text-black text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full shadow-lg">
                     {cartCount}
                 </span>
             )}
-          </button>
-          
-          <div className="h-8 w-px bg-white/10"></div>
-          
-          <button 
-            className="flex items-center gap-3 group/profile"
-            onClick={() => setMode(mode === UserMode.CHEF ? UserMode.VIEWER : UserMode.CHEF)}
-          >
-             <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-transparent group-hover/profile:border-soosoo-gold transition-all duration-300 shadow-lg">
-               <img src="https://images.unsplash.com/photo-1566554273541-37a9ca77b91f?q=80&w=150&auto=format&fit=crop" className="w-full h-full object-cover" alt="Susu" />
-             </div>
-             <div className="hidden md:flex flex-col items-start">
-                <span className="text-xs font-bold text-white tracking-wider group-hover/profile:text-soosoo-gold transition-colors">Susu</span>
-                <span className="text-[8px] text-gray-500 uppercase tracking-widest">{mode} Mode</span>
-             </div>
-          </button>
-        </div>
+        </button>
+
+        {/* Profile Switcher */}
+        {isExpanded && (
+            <button 
+                onClick={() => setMode(mode === UserMode.CHEF ? UserMode.VIEWER : UserMode.CHEF)}
+                className="flex items-center gap-3 animate-fade-in bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-full border border-white/5 transition-colors"
+            >
+                <img 
+                    src="https://images.unsplash.com/photo-1566554273541-37a9ca77b91f?q=80&w=150&auto=format&fit=crop" 
+                    className="w-6 h-6 rounded-full object-cover border border-soosoo-gold/50" 
+                    alt="Profile" 
+                />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-300">
+                    {mode === UserMode.CHEF ? 'Chef Mode' : 'Viewer'}
+                </span>
+            </button>
+        )}
 
       </div>
-    </nav>
+    </div>
   );
 };

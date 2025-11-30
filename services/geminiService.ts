@@ -110,6 +110,7 @@ export const generateDishImage = async (prompt: string): Promise<string> => {
     } catch (e) { return "https://images.unsplash.com/photo-1556910103-1c02745a30bf?q=80&w=1000"; }
 };
 
+// VEO Video Generation with Robust Fallback
 export const generateTutorialVideo = async (prompt: string, imageDataUrl?: string): Promise<{ url: string, isFallback: boolean } | null> => {
     const aistudio = (window as any).aistudio;
     if (aistudio && !(await aistudio.hasSelectedApiKey())) {
@@ -141,7 +142,7 @@ export const generateTutorialVideo = async (prompt: string, imageDataUrl?: strin
         throw new Error("Video generation failed");
     } catch (e: any) {
         console.warn("Veo error or quota exceeded, using fallback.", e);
-        // Reliable fallback URL
+        // Reliable fallback URL (Pexels / Public Storage)
         return { 
             url: "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", 
             isFallback: true 
@@ -149,64 +150,167 @@ export const generateTutorialVideo = async (prompt: string, imageDataUrl?: strin
     }
 };
 
-export const suggestRecipeFromPantry = async (imageBlob: Blob) => { return []; }; 
-export const speakText = async (text: string) => { return { stop: () => {} }; };
+export const suggestRecipeFromPantry = async (imageBlob: Blob): Promise<{ title: string, reason: string, matchScore: number }[]> => {
+    const ai = getAI();
+    try {
+        const base64Image = await blobToBase64(imageBlob);
+        
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: {
+                parts: [
+                    { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
+                    { text: "Look at these ingredients in the fridge/pantry. Identify them. Then, suggest 3 Middle Eastern recipes I could make with them. Return JSON with 'title', 'reason' (why it works with these items), and 'matchScore' (0-100)." }
+                ]
+            },
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.ARRAY,
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            title: { type: Type.STRING },
+                            reason: { type: Type.STRING },
+                            matchScore: { type: Type.INTEGER }
+                        }
+                    }
+                }
+            }
+        });
+
+        if (response.text) {
+            return JSON.parse(response.text);
+        }
+        return [];
+    } catch (e) {
+        console.error("Pantry scan error", e);
+        return [];
+    }
+};
+
+// --- TTS ---
+let sharedAudioContext: AudioContext | null = null;
+
+export const speakText = async (text: string): Promise<{ stop: () => void }> => {
+  if (!text.trim()) return { stop: () => {} };
+
+  if (!sharedAudioContext) {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      sharedAudioContext = new AudioContextClass();
+  }
+
+  if (sharedAudioContext.state === 'suspended') {
+      try {
+        await sharedAudioContext.resume();
+      } catch (e) {
+        console.warn("Failed to resume AudioContext", e);
+      }
+  }
+
+  const ai = getAI();
+  let source: AudioBufferSourceNode | null = null;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash-preview-tts",
+      contents: [{ parts: [{ text: text }] }],
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: 'Kore' },
+          },
+        },
+      },
+    });
+
+    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (base64Audio) {
+      const audioBuffer = pcmToAudioBuffer(base64Audio, sharedAudioContext, 24000);
+      source = sharedAudioContext.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(sharedAudioContext.destination);
+      source.start();
+    }
+  } catch (e) {
+    console.error("TTS error", e);
+  }
+
+  return {
+      stop: () => {
+          if (source) {
+              try {
+                  source.stop();
+              } catch (e) { /* ignore if already stopped */ }
+          }
+      }
+  };
+};
+
+function pcmToAudioBuffer(base64: string, ctx: AudioContext, sampleRate: number): AudioBuffer {
+    const binaryString = atob(base64);
+    const len = binaryString.length;
+    const int16Buffer = new Int16Array(len / 2);
+    for (let i = 0; i < len; i += 2) {
+        const byte1 = binaryString.charCodeAt(i);
+        const byte2 = binaryString.charCodeAt(i + 1);
+        const sample = (byte2 << 8) | byte1;
+        int16Buffer[i / 2] = sample >= 32768 ? sample - 65536 : sample;
+    }
+    const audioBuffer = ctx.createBuffer(1, int16Buffer.length, sampleRate);
+    const channelData = audioBuffer.getChannelData(0);
+    for (let i = 0; i < int16Buffer.length; i++) {
+        channelData[i] = int16Buffer[i] / 32768.0;
+    }
+    return audioBuffer;
+}
 
 export const connectLiveSession = async (
     onMessage: (audioData: string | undefined, isTurnComplete: boolean) => void, 
     onClose: () => void
 ) => {
   const ai = getAI();
-  let session: any = null;
-
-  try {
-      session = await ai.live.connect({
-        model: 'gemini-2.5-flash-native-audio-preview-09-2025',
-        callbacks: {
-            onopen: () => console.log('Live session connected'),
-            onmessage: (message: LiveServerMessage) => {
-                const audioData = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
-                const isTurnComplete = message.serverContent?.turnComplete || false;
-                onMessage(audioData, isTurnComplete);
-            },
-            onclose: () => {
-                console.log('Live session closed');
-                onClose();
-            },
-            onerror: (e) => {
-                console.error('Live session error:', e);
-                onClose();
-            }
-        },
-        config: {
-            responseModalities: [Modality.AUDIO],
-            speechConfig: {
-                voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
-            },
-            systemInstruction: 'You are SooSoo, a warm, experienced Middle Eastern mother and chef. Guide the user through cooking.',
-        },
-      });
-  } catch (e) {
-      console.error("Failed to connect live session", e);
-      // Let the caller handle connection failure if necessary
-      throw e;
-  }
+  const session = await ai.live.connect({
+    model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+    callbacks: {
+      onopen: () => {
+        console.log("Live session connected");
+      },
+      onmessage: (msg: LiveServerMessage) => {
+        const audioData = msg.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
+        const isTurnComplete = msg.serverContent?.turnComplete || false;
+        onMessage(audioData, isTurnComplete);
+      },
+      onclose: () => {
+        onClose();
+      },
+      onerror: (e) => {
+        console.error("Live session error:", e);
+        onClose();
+      }
+    },
+    config: {
+      responseModalities: [Modality.AUDIO],
+      speechConfig: {
+        voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } }
+      },
+      systemInstruction: 'You are SooSoo, a warm, experienced Middle Eastern mother and chef. Speak warmly and guide the user through cooking.'
+    }
+  });
 
   return {
-      sendAudio: async (blob: Blob) => {
-          if (!session) return;
-          const base64 = await blobToBase64(blob);
-          session.sendRealtimeInput({
-              media: {
-                  mimeType: 'audio/pcm;rate=16000',
-                  data: base64
-              }
-          });
-      },
-      close: () => {
-          if (session) {
-            session.close();
-          }
-      }
+    sendAudio: async (blob: Blob) => {
+      const base64 = await blobToBase64(blob);
+      session.sendRealtimeInput({
+        media: {
+          mimeType: 'audio/pcm;rate=16000',
+          data: base64
+        }
+      });
+    },
+    close: () => {
+      session.close();
+    }
   };
 };

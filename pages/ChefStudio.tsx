@@ -210,7 +210,7 @@ export const ChefStudio: React.FC<ChefStudioProps> = ({ onSave, onCancel }) => {
             alert("Video generation failed.");
         }
     } catch (err: any) {
-        console.error(err);
+        console.error("Video Error (Safe Log):", err.message || "Unknown error");
         alert("Failed to generate video");
     } finally {
         setStep('edit');
@@ -370,7 +370,16 @@ export const ChefStudio: React.FC<ChefStudioProps> = ({ onSave, onCancel }) => {
                     <div className="aspect-video bg-black/50 mb-4 flex items-center justify-center overflow-hidden relative">
                         {videoUrl ? (
                             <>
-                                <video key={videoUrl} src={videoUrl} autoPlay muted loop playsInline className="w-full h-full object-cover" />
+                                <video 
+                                    key={videoUrl} // Force re-render on new URL
+                                    src={videoUrl} 
+                                    autoPlay 
+                                    muted 
+                                    loop 
+                                    playsInline 
+                                    className="w-full h-full object-cover" 
+                                    onError={() => console.warn("Video failed to load")} // Simple error handler
+                                />
                                 {isSimulatedVideo && <div className="absolute top-2 right-2 bg-yellow-600 text-white text-[10px] px-2 py-1 uppercase font-bold">Simulation Mode</div>}
                             </>
                         ) : <span className="text-gray-600">No Video</span>}
