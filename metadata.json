@@ -1,0 +1,8 @@
+{
+  "name": "SooSoo's Kitchen",
+  "description": "A cinematic, AI-powered recipe storytelling platform specializing in Middle Eastern cuisine. Features Chef Mode for AI content creation and a smart Cooking Assistant.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
