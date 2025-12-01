@@ -46,6 +46,7 @@ export interface Recipe {
   isAI?: boolean;
   createdAt?: number;
   reviews?: Review[];
+  isFavorite?: boolean;
 }
 
 export interface ChatMessage {

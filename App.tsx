@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { UserMode, Recipe, CartItem, Ingredient } from './types';
 import { INITIAL_RECIPES } from './constants';
@@ -79,6 +80,16 @@ const App: React.FC = () => {
     } catch (e) { console.error(e); }
   };
 
+  const toggleFavorite = (recipeId: string) => {
+      const updated = recipes.map(r => 
+          r.id === recipeId ? { ...r, isFavorite: !r.isFavorite } : r
+      );
+      setRecipes(updated);
+      try {
+          localStorage.setItem('soosoo_recipes', JSON.stringify(updated));
+      } catch (e) { console.error(e); }
+  };
+
   const navigate = (path: string) => setCurrentRoute(path);
 
   const handleRecipeClick = (id: string) => {
@@ -98,19 +109,37 @@ const App: React.FC = () => {
   const renderContent = () => {
     switch (currentRoute) {
       case 'home':
-        return <Home recipes={recipes} onRecipeClick={handleRecipeClick} onCreateClick={() => navigate('create')} onShare={handleShare} />;
+        return (
+            <Home 
+                recipes={recipes} 
+                onRecipeClick={handleRecipeClick} 
+                onCreateClick={() => navigate('create')} 
+                onShare={handleShare} 
+                onToggleFavorite={toggleFavorite}
+            />
+        );
       case 'detail':
         const recipe = recipes.find(r => r.id === selectedRecipeId);
-        if (!recipe) return <Home recipes={recipes} onRecipeClick={handleRecipeClick} onCreateClick={() => navigate('create')} onShare={handleShare} />;
-        return <RecipeDetail recipe={recipe} onBack={() => navigate('home')} onStartCooking={handleStartCooking} onUpdateRecipe={updateRecipe} onAddToCart={addToCart} onShare={handleShare} />;
+        if (!recipe) return <Home recipes={recipes} onRecipeClick={handleRecipeClick} onCreateClick={() => navigate('create')} onShare={handleShare} onToggleFavorite={toggleFavorite} />;
+        return (
+            <RecipeDetail 
+                recipe={recipe} 
+                onBack={() => navigate('home')} 
+                onStartCooking={handleStartCooking} 
+                onUpdateRecipe={updateRecipe} 
+                onAddToCart={addToCart} 
+                onShare={handleShare} 
+                onToggleFavorite={toggleFavorite}
+            />
+        );
       case 'cooking':
         const cookingRecipe = recipes.find(r => r.id === selectedRecipeId);
-        if (!cookingRecipe) return <Home recipes={recipes} onRecipeClick={handleRecipeClick} onCreateClick={() => navigate('create')} onShare={handleShare} />;
+        if (!cookingRecipe) return <Home recipes={recipes} onRecipeClick={handleRecipeClick} onCreateClick={() => navigate('create')} onShare={handleShare} onToggleFavorite={toggleFavorite} />;
         return <CookingMode recipe={cookingRecipe} onExit={() => navigate('detail')} />;
       case 'create':
         return <ChefStudio onSave={saveRecipe} onCancel={() => navigate('home')} />;
       default:
-        return <Home recipes={recipes} onRecipeClick={handleRecipeClick} onCreateClick={() => navigate('create')} onShare={handleShare} />;
+        return <Home recipes={recipes} onRecipeClick={handleRecipeClick} onCreateClick={() => navigate('create')} onShare={handleShare} onToggleFavorite={toggleFavorite} />;
     }
   };
 

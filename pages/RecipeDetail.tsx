@@ -10,9 +10,10 @@ interface RecipeDetailProps {
   onUpdateRecipe: (updatedRecipe: Recipe) => void;
   onAddToCart: (ingredients: Ingredient[], recipeTitle: string) => void;
   onShare: (recipe: Recipe) => void;
+  onToggleFavorite: (id: string) => void;
 }
 
-export const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onBack, onStartCooking, onUpdateRecipe, onAddToCart, onShare }) => {
+export const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onBack, onStartCooking, onUpdateRecipe, onAddToCart, onShare, onToggleFavorite }) => {
   const [showShoppingList, setShowShoppingList] = useState(false);
   const [newRating, setNewRating] = useState(5);
   const [newComment, setNewComment] = useState('');
@@ -191,7 +192,18 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onBack, onSt
         </div>
 
         {/* Share Button (Top Right) */}
-        <div className="absolute top-28 right-6 z-30">
+        <div className="absolute top-28 right-6 z-30 flex gap-4">
+            <button onClick={() => onToggleFavorite(recipe.id)} className={`text-white transition flex items-center gap-2 group`}>
+                <span className="text-xs uppercase tracking-widest font-bold opacity-0 group-hover:opacity-100 transition-opacity -mr-2 group-hover:mr-0">Favorite</span>
+                <span className={`border border-white/20 rounded-full p-3 bg-black/20 backdrop-blur transition ${recipe.isFavorite ? 'text-soosoo-gold bg-soosoo-gold/10 border-soosoo-gold' : 'hover:border-soosoo-gold hover:text-soosoo-gold'}`}>
+                    {recipe.isFavorite ? (
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                    ) : (
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
+                    )}
+                </span>
+            </button>
+
             <button onClick={() => onShare(recipe)} className="text-white hover:text-soosoo-gold transition flex items-center gap-2 group">
                 <span className="text-xs uppercase tracking-widest font-bold opacity-0 group-hover:opacity-100 transition-opacity -mr-2 group-hover:mr-0">Share</span>
                 <span className="border border-white/20 rounded-full p-3 bg-black/20 backdrop-blur group-hover:border-soosoo-gold transition">

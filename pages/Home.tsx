@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useRef } from 'react';
 import { Recipe } from '../types';
 import { RecipeCard } from '../components/RecipeCard';
@@ -9,9 +10,10 @@ interface HomeProps {
   onRecipeClick: (id: string) => void;
   onCreateClick: () => void;
   onShare: (recipe: Recipe) => void;
+  onToggleFavorite: (id: string) => void;
 }
 
-export const Home: React.FC<HomeProps> = ({ recipes, onRecipeClick, onCreateClick, onShare }) => {
+export const Home: React.FC<HomeProps> = ({ recipes, onRecipeClick, onCreateClick, onShare, onToggleFavorite }) => {
   const [activeFilter, setActiveFilter] = useState<string>('ALL');
   const [selectedProfileId, setSelectedProfileId] = useState<string>('p1'); 
   
@@ -20,12 +22,14 @@ export const Home: React.FC<HomeProps> = ({ recipes, onRecipeClick, onCreateClic
   const [pantrySuggestions, setPantrySuggestions] = useState<{ title: string, reason: string, matchScore: number }[] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const FILTERS = ['ALL', 'APPETIZER', 'BREAKFAST', 'DESSERT', 'DIFFICULT', 'DINNER', 'EASY'];
+  const FILTERS = ['ALL', 'FAVORITES', 'APPETIZER', 'BREAKFAST', 'DESSERT', 'DIFFICULT', 'DINNER', 'EASY'];
 
   const filteredRecipes = useMemo(() => {
     let result = [...recipes];
     if (activeFilter !== 'ALL') {
-        if (activeFilter === 'EASY' || activeFilter === 'DIFFICULT') {
+        if (activeFilter === 'FAVORITES') {
+            result = result.filter(r => r.isFavorite);
+        } else if (activeFilter === 'EASY' || activeFilter === 'DIFFICULT') {
              const diffMap: Record<string, string> = { 'EASY': 'Easy', 'DIFFICULT': 'Hard' };
              result = result.filter(r => r.difficulty === diffMap[activeFilter]);
         } else {
@@ -203,11 +207,12 @@ export const Home: React.FC<HomeProps> = ({ recipes, onRecipeClick, onCreateClic
                         recipe={recipe} 
                         onClick={() => onRecipeClick(recipe.id)}
                         onShare={handleShareClick}
+                        onToggleFavorite={onToggleFavorite}
                     />
                 ))
             ) : (
                 <div className="col-span-full py-20 text-center text-gray-500 font-serif italic">
-                    No recipes found for this category.
+                    {activeFilter === 'FAVORITES' ? 'You have no favorite recipes yet.' : 'No recipes found for this category.'}
                 </div>
             )}
         </div>
