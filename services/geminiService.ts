@@ -97,17 +97,25 @@ export const generateRecipeMultimodal = async (imageBlob?: Blob, audioBlob?: Blo
 };
 
 export const generateDishImage = async (prompt: string): Promise<string> => {
+    const aistudio = (window as any).aistudio;
+    if (aistudio && !(await aistudio.hasSelectedApiKey())) {
+        try { await aistudio.openSelectKey(); } catch (e) { console.error(e); }
+    }
+
     const ai = getAI();
     try {
         const response = await ai.models.generateContent({
             model: 'gemini-3-pro-image-preview',
-            contents: { parts: [{ text: `Cinematic food photography: ${prompt}` }] },
+            contents: { parts: [{ text: `Professional food photography, cinematic lighting, 8k resolution, overhead shot of: ${prompt}. Appetizing, vibrant colors.` }] },
             config: { imageConfig: { aspectRatio: "16:9", imageSize: "2K" } }
         });
         const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
         if (part) return `data:image/png;base64,${part.inlineData.data}`;
-        throw new Error("No image");
-    } catch (e) { return "https://images.unsplash.com/photo-1556910103-1c02745a30bf?q=80&w=1000"; }
+        throw new Error("No image data returned");
+    } catch (e) { 
+        console.warn("Image generation failed, using fallback", e);
+        return "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=1200&auto=format&fit=crop"; 
+    }
 };
 
 // VEO Video Generation with Robust Fallback
@@ -142,7 +150,7 @@ export const generateTutorialVideo = async (prompt: string, imageDataUrl?: strin
         throw new Error("Video generation failed");
     } catch (e: any) {
         console.warn("Veo error or quota exceeded, using fallback.", e);
-        // Reliable fallback URL (Pexels / Public Storage)
+        // Reliable fallback URL (Public Storage)
         return { 
             url: "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", 
             isFallback: true 
